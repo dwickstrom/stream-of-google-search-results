@@ -1,5 +1,4 @@
 const Nightmare = require('nightmare')
-const Task = require('data.task')
 const { chain, from, fromPromise, of, generate, empty, map, reduce } = require('most')
 const most = require('most')
 const foldl = require('sanctuary').reduce
@@ -7,24 +6,23 @@ const fmap = require('sanctuary').map
 const { drop, prop, isJust, trim } = require('sanctuary')
 const { compose } = require('ramda')
 
-const nightmare = Nightmare({show: true})
+const nightmare = Nightmare({show: false})
 
 // readFile :: String -> Promise String
 const readFile = fileName =>
-	new Promise((res, rej) =>
-		require('fs').readFile(fileName, 'utf-8', (err, data) =>
-			err ? rej(err) : res(data)))
+  new Promise((res, rej) =>
+    require('fs').readFile(fileName, 'utf-8', (err, data) =>
+      err ? rej(err) : res(data)))
 
 // readFileStream :: String -> Stream String
 const readFileStream =
-	compose(fromPromise, readFile)
+  compose(fromPromise, readFile)
 
 // results :: String -> Stream {}
-function* results (term) {
+const results = function* (term) {
   yield initSearch(term)
-	while (true) {
-		yield nextResults()
-  }
+  while (true)
+    yield nextResults()
 }
 
 // initSearch :: String -> Promise {}
@@ -50,52 +48,52 @@ const nextResults = () => {
     .wait('#resultStats')
     .evaluate(() =>
       [].map.call(
-          document.querySelectorAll('.g h3 a'),
-          a => ({title: a.innerText, href: a.href})))
-    res(nightmare)
+        document.querySelectorAll('.g h3 a'),
+        a => ({title: a.innerText, href: a.href})))
+      res(nightmare)
   })
 }
 
 // wakeUpFrom :: Nightmare -> Any -> Nightmare
 const wakeUpFrom = nightmare => res =>
-	res && nightmare.end()
+  res && nightmare.end()
 
 // beginNightmare :: {} -> Stream {}
 const beginNightmare = query =>
   generate(results, query.term)
-	.take(query.pages)
+  .take(query.pages)
 
 // concatArgs :: [String] -> String
 const concatArgs =
-	foldl(acc => x => `${acc} ${x}`, '')
+  foldl(acc => x => `${acc} ${x}`, '')
 
 // maybeToStream :: Maybe a -> Stream Maybe a
 const maybeToStream = m =>
-	isJust(m)
-	? of(m.value)
-	: empty()
+  isJust(m)
+  ? of(m.value)
+  : empty()
 
 // pluckArgs :: () -> Stream String
 const pluckArgs = compose(
-	maybeToStream,
-	fmap(compose(trim, concatArgs)),
-	drop(2)
+  maybeToStream,
+  fmap(compose(trim, concatArgs)),
+  drop(2)
 )
 
 // getConf :: String -> Stream {}
 const getConf = file =>
-	readFileStream(file)
-	.map(JSON.parse)
+  readFileStream(file)
+  .map(JSON.parse)
 
 // buildQuery :: a -> b -> {}
 const buildQuery = pages => term =>
-	({pages, term})
+  ({pages, term})
 
 // initQuery :: () -> {}
 const initQuery = () =>
-	of(buildQuery)
-	.ap(getConf('config.json').map(prop('pages')))
-	.ap(pluckArgs(process.argv))
+  of(buildQuery)
+  .ap(getConf('config.json').map(prop('pages')))
+  .ap(pluckArgs(process.argv))
 
 initQuery()
 .chain(beginNightmare)

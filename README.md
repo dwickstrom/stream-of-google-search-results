@@ -1,4 +1,4 @@
-#Stream of search result pages
+# Stream of search result pages
 
 This little program will accept a set of command line arguments and then return a stream of Google search results from those concatenated arguments.
 
