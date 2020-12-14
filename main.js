@@ -1,12 +1,13 @@
-const Nightmare = require('nightmare')
-const { chain, from, fromPromise, of, generate, empty, map, reduce } = require('most')
+const { fromPromise, of, generate, empty } = require('most')
 const most = require('most')
 const foldl = require('sanctuary').reduce
 const fmap = require('sanctuary').map
 const { drop, prop, isJust, trim } = require('sanctuary')
 const { compose } = require('ramda')
+const puppeteer = require('puppeteer')
 
-const nightmare = Nightmare({show: false})
+const browser = puppeteer.launch({headless: true, slowMo: 25});
+const page = browser.then(b => b.newPage());
 
 // readFile :: String -> Promise String
 const readFile = fileName =>
@@ -25,47 +26,53 @@ const results = function* (term) {
     yield nextResults()
 }
 
+const resultSelector =
+  () => [].map.call(document.querySelectorAll('#rso > .g > div > div:nth-child(1) > a'), 
+                    e => ({title: e.innerText,href: e.href}))
+
 // initSearch :: String -> Promise {}
 const initSearch = term => {
-  return new Promise((res, rej) => {
-    const session = nightmare
-    .goto('https://www.google.se')
-    .type('input[name="q"]', term)
-    .click('#tsf > div.tsf-p > div.jsb > center > input[type="submit"]:nth-child(1)')
-    .wait('#resultStats')
-    .evaluate(() =>
-      [].map.call(
-        document.querySelectorAll('.g h3 a'),
-        a => ({title: a.innerText, href: a.href})))
-    res(session)
-  })
-}
+  return new Promise((resolve, reject) => {
+    page
+      .then(page => page.goto("https://www.google.se")
+        .then(() => page.type('input[name="q"]', term))
+        .then(() => page.type('input[name="q"]', '\u000d'))
+        .then(() => page.waitForSelector('#rso'))
+        .then(() => page.waitForTimeout(200))
+        .then(() => page.evaluate(resultSelector)))
+      .then(resolve)
+      .catch(reject)
+    })
+  }
+
 
 const nextResults = () => {
-  return new Promise((res, rej) => {
-    nightmare
-    .click('#pnnext > span:nth-child(2)')
-    .wait('#resultStats')
-    .evaluate(() =>
-      [].map.call(
-        document.querySelectorAll('.g h3 a'),
-        a => ({title: a.innerText, href: a.href})))
-      res(nightmare)
+  return new Promise((resolve, reject) => {
+    page
+      .then(page => page.click("#pnnext > span:nth-child(2)")
+        .then(() => page.waitForSelector("#rso"))
+        .then(() => page.waitForTimeout(200))
+        .then(() => page.evaluate(resultSelector)))
+      .then(resolve)
+      .catch(reject)
   })
 }
 
-// wakeUpFrom :: Nightmare -> Any -> Nightmare
-const wakeUpFrom = nightmare => res =>
-  res && nightmare.end()
+// terminateSession :: Browser -> Any -> ()
+const terminateSession = session => _ =>
+    new Promise((resolve, reject) => session
+      .then(s => s.close() && resolve())
+      .catch(reject))
+  
 
 // beginNightmare :: {} -> Stream {}
-const beginNightmare = query =>
+const traversePages = query =>
   generate(results, query.term)
   .take(query.pages)
 
 // concatArgs :: [String] -> String
 const concatArgs =
-  foldl(acc => x => `${acc} ${x}`, '')
+  foldl(acc => x => `${acc} ${x}`) ('')
 
 // maybeToStream :: Maybe a -> Stream Maybe a
 const maybeToStream = m =>
@@ -96,6 +103,10 @@ const initQuery = () =>
   .ap(pluckArgs(process.argv))
 
 initQuery()
-.chain(beginNightmare)
+.chain(traversePages)
 .observe(console.log)
-.then(wakeUpFrom(nightmare), console.error)
+.then(terminateSession(browser))
+.catch(err => {
+  console.log(err)
+  browser.then(b => b.close())
+})
