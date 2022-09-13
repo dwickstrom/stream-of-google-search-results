@@ -48,13 +48,14 @@ const results:
 
 const resultSelector =
     () => 
-        [].map.call(document.querySelectorAll('#rso > .g > div > div:nth-child(1) > a'), 
+        [].map.call(document.querySelectorAll('#rso > div > div > div > div > div > div > a'), 
                     (e: any) => ({title: e.innerText,href: e.href}))
 
 const initSearch: (term: string) => Promise<SearchResultPage> = 
     (term: string) => 
         new Promise((resolve, reject) => 
             page.then(page => page.goto("https://www.google.se")
+                    .then(() => page.click('#L2AGLb'))
                     .then(() => page.type('input[name="q"]', term))
                     .then(() => page.type('input[name="q"]', '\u000d'))
                     .then(() => page.waitForSelector('#rso'))
@@ -81,7 +82,7 @@ const terminateSession = (browser: Promise<Browser>) => (_: SearchResultPage) =>
         browser
             .then((s: Browser) => s.close())
             .then(() => console.log(_))
-            .then(() => resolve())
+            .then(() => resolve(null))
             .catch(reject))
 
 
